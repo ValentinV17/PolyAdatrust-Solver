@@ -146,17 +146,15 @@ class _PolyAdaTrust:
     ----------
     grad  : callable  —  gradient oracle
     x0    : ndarray   —  starting point
-    theta : float     —  polynomial decay exponent  (default 1.3)
-    eta   : float     —  trust-region radius scale  (default 1.2)
-    zeta  : float     —  step-size fraction for radius acceptance  (default 0.3)
+    theta : float     —  polynomial decay exponent  (default 0.85)
+    eta   : float     —  trust-region radius scale  (default 1.1)
     bmin  : float     —  minimum scaling factor  (default 1e-4)
     """
-    def __init__(self, grad, x0, theta=1.3, eta=1.2, zeta=0.3, bmin=1e-4):
+    def __init__(self, grad, x0, theta=1.1, eta=0.85, bmin=1e-4):
         self.grad  = grad
         self.x     = np.asarray(x0, dtype=float).copy()
         self.theta = theta
         self.eta   = eta
-        self.zeta  = zeta
         self.bmin  = bmin
         self.ck    = 0.0
         self.g         = grad(self.x)
@@ -174,8 +172,7 @@ class _PolyAdaTrust:
         g_new     = self.grad(x_new)
         gnorm_new = np.linalg.norm(g_new)
         d_norm    = np.linalg.norm(d)
-        if (gnorm_new <= self.gnorm0 / (self.ck + 1) ** self.theta
-                and d_norm > self.zeta * Delta):
+        if gnorm_new <= self.gnorm0 / (self.ck + 1) ** self.theta:
             bhat  = min(self.bhat_max,
                         max(self.bmin, self.b / 2)
                         if d_norm > 0.5 * Delta
@@ -231,9 +228,8 @@ def minimize(grad, x0,
         Print a progress line every 100 iterations.
     **solver_kwargs
         Forwarded to PolyAdaTrust.  Useful knobs:
-          - theta (float, default 1.3)  — polynomial decay exponent
-          - eta   (float, default 1.2)  — trust-region radius scale
-          - zeta  (float, default 0.3)  — step-size fraction for radius acceptance
+          - theta (float, default 1.1)  — polynomial decay exponent
+          - eta   (float, default 0.85)  — trust-region radius scale
           - bmin  (float, default 1e-4) — minimum scaling factor
 
     Returns
