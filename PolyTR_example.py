@@ -1,12 +1,12 @@
 """
-example.py
+PolyTR_example.py
 ==========
-Minimal self-contained example of PolyAdaTrust — a gradient-only adaptive
+Minimal self-contained example of PolyTR — a gradient-only adaptive
 trust-region optimizer.  Only numpy is required (numba is optional).
 
 Quick start
 -----------
-    python example.py
+    python PolyTR_example.py
 
 API
 ---
@@ -16,11 +16,6 @@ API
 """
 
 import numpy as np
-
-
-# =============================================================================
-# Solver internals  (extracted from core.py — no external dependencies)
-# =============================================================================
 
 # Optional Numba JIT for the inner hot path.  Falls back to NumPy silently.
 try:
@@ -133,9 +128,9 @@ class _BFGS:
         return self.B @ v
 
 
-class _PolyAdaTrust:
+class _PolyTR:
     """
-    PolyAdaTrust: gradient-only adaptive trust-region method.
+    PolyTR: gradient-only adaptive trust-region method.
 
     At each step the trust-region radius Delta_k = eta * ||g_k|| / b_k is set
     automatically; no function evaluations are required.  The decrease
@@ -150,7 +145,7 @@ class _PolyAdaTrust:
     eta   : float     —  trust-region radius scale  (default 1.1)
     bmin  : float     —  minimum scaling factor  (default 1e-4)
     """
-    def __init__(self, grad, x0, theta=1.1, eta=0.85, bmin=1e-4):
+    def __init__(self, grad, x0, theta=1.1, eta=0.85, bmin=1e-4*0.85):
         self.grad  = grad
         self.x     = np.asarray(x0, dtype=float).copy()
         self.theta = theta
@@ -162,7 +157,7 @@ class _PolyAdaTrust:
         self.gnorm0    = float(self.gnorm)
         self.gnorm_min = float(self.gnorm)
         self.b         = max(bmin, self.gnorm * eta)
-        self.bhat_max  = float(self.gnorm)
+        self.bhat_max  = float(self.gnorm*eta)
         self.H         = _BFGS(len(self.x))
 
     def step(self):
@@ -200,7 +195,7 @@ def minimize(grad, x0,
              verbose=True,
              **solver_kwargs):
     """
-    Minimize a smooth function using PolyAdaTrust.
+    Minimize a smooth function using PolyTR.
 
     Only a gradient oracle is required — no function evaluations.
 
@@ -227,7 +222,7 @@ def minimize(grad, x0,
     verbose : bool
         Print a progress line every 100 iterations.
     **solver_kwargs
-        Forwarded to PolyAdaTrust.  Useful knobs:
+        Forwarded to PolyTR.  Useful knobs:
           - theta (float, default 1.1)  — polynomial decay exponent
           - eta   (float, default 0.85)  — trust-region radius scale
           - bmin  (float, default 1e-4) — minimum scaling factor
@@ -241,7 +236,7 @@ def minimize(grad, x0,
         success  — True if stopping criterion was met before max_iter
     """
     x0 = np.asarray(x0, dtype=float)
-    opt = _PolyAdaTrust(grad, x0, **solver_kwargs)
+    opt = _PolyTR(grad, x0, **solver_kwargs)
 
     if stopping_criterion is None:
         def stopping_criterion(s):
@@ -293,6 +288,7 @@ if __name__ == "__main__":
         x0=x0,
         tol=1e-6,
         max_iter=10_000,
+        
     )
 
     print()
