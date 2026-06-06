@@ -1,18 +1,20 @@
 """
-PolyTR_example.py
-==========
-Minimal self-contained example of PolyTR — a gradient-only adaptive
-trust-region optimizer.  Only numpy is required (numba is optional).
+polytr.py
+=========
+PolyTR — a gradient-only adaptive trust-region optimizer.
 
-Quick start
------------
-    python PolyTR_example.py
+Only NumPy is required; Numba is used automatically for the inner hot path
+if it is installed, and the code falls back to pure NumPy otherwise.
 
 API
 ---
+    from polytr import minimize
+
     result = minimize(grad, x0)
     result = minimize(grad, x0, tol=1e-8, max_iter=5000, theta=1.3)
     result = minimize(grad, x0, stopping_criterion=lambda s: s.gnorm < 1e-6)
+
+See ``example.py`` for a runnable demonstration on the Rosenbrock function.
 """
 
 import numpy as np
@@ -70,8 +72,21 @@ try:
         norm_z = np.linalg.norm(z)
         return z if norm_z > 0.0 else -g * min(1.0, Delta / (np.linalg.norm(g) + 1e-12))
 
-except ImportError:
-    # Pure-NumPy fallback — identical logic, no JIT
+    # Warm up the JIT.  In some environments Numba imports fine but cannot
+    # compile these kernels — most commonly because SciPy/BLAS is missing, which
+    # Numba needs for `@` / np.dot in nopython mode.  Compilation is otherwise
+    # lazy (deferred to the first solve), so forcing it here lets us detect the
+    # failure and fall back to NumPy instead of crashing mid-run.
+    _wb = np.eye(2)
+    _wv = np.ones(2)
+    _solve_tau(np.zeros(2), _wv, 1.0)
+    _bfgs_update(_wb.copy(), _wv, _wv)
+    _steihaug(_wv, _wb, 1.0, 1e-10)
+
+
+except Exception:
+    # Pure-NumPy fallback — identical logic, no JIT.  Reached when Numba is
+    # absent, or present but unable to compile (e.g. no SciPy/BLAS available).
     def _solve_tau(z, d, Delta):
         a = d @ d
         if a <= 0:
@@ -81,7 +96,7 @@ except ImportError:
         disc = max(0.0, b * b - 4 * a * c)
         tau  = (-b + np.sqrt(disc)) / (2 * a)
         return tau if np.isfinite(tau) else 0.0
-
+ 
     def _bfgs_update(B, s, y):
         Bs   = B @ s
         sTBs = s @ Bs
@@ -89,7 +104,7 @@ except ImportError:
             return
         sTy = s @ y
         B += np.outer(y, y) / sTy - np.outer(Bs, Bs) / sTBs
-
+ 
     def _steihaug(g, B, Delta, tol):
         z = np.zeros_like(g)
         r = g.copy()
@@ -114,6 +129,7 @@ except ImportError:
             z, r  = z_new, r_new
         norm_z = np.linalg.norm(z)
         return z if norm_z > 0 else -g * min(1.0, Delta / (np.linalg.norm(g) + 1e-12))
+
 
 
 class _BFGS:
@@ -141,9 +157,9 @@ class _PolyTR:
     ----------
     grad  : callable  —  gradient oracle
     x0    : ndarray   —  starting point
-    theta : float     —  polynomial decay exponent  (default 0.85)
-    eta   : float     —  trust-region radius scale  (default 1.1)
-    bmin  : float     —  minimum scaling factor  (default 1e-4)
+    theta : float     —  polynomial decay exponent  (default 1.1)
+    eta   : float     —  trust-region radius scale  (default 0.85)
+    bmin  : float     —  minimum scaling factor  (default 0.85 * 1e-4)
     """
     def __init__(self, grad, x0, theta=1.1, eta=0.85, bmin=1e-4*0.85):
         self.grad  = grad
@@ -155,7 +171,6 @@ class _PolyTR:
         self.g         = grad(self.x)
         self.gnorm     = np.linalg.norm(self.g)
         self.gnorm0    = float(self.gnorm)
-        self.gnorm_min = float(self.gnorm)
         self.b         = max(bmin, self.gnorm * eta)
         self.bhat_max  = float(self.gnorm*eta)
         self.H         = _BFGS(len(self.x))
@@ -181,7 +196,6 @@ class _PolyTR:
         self.g         = g_new
         self.gnorm     = gnorm_new
         self.b         = b_new
-        self.gnorm_min = min(self.gnorm_min, self.gnorm)
 
 
 # =============================================================================
@@ -217,7 +231,6 @@ def minimize(grad, x0,
           - solver.x         — current iterate
           - solver.g         — current gradient
           - solver.gnorm     — ||g||
-          - solver.gnorm_min — smallest ||g|| seen so far
         Return True to stop.
     verbose : bool
         Print a progress line every 100 iterations.
@@ -225,7 +238,7 @@ def minimize(grad, x0,
         Forwarded to PolyTR.  Useful knobs:
           - theta (float, default 1.1)  — polynomial decay exponent
           - eta   (float, default 0.85)  — trust-region radius scale
-          - bmin  (float, default 1e-4) — minimum scaling factor
+          - bmin  (float, default 0.85 * 1e-4) — minimum scaling factor
 
     Returns
     -------
@@ -263,36 +276,3 @@ def minimize(grad, x0,
 
     return {"x": opt.x.copy(), "gnorm": opt.gnorm,
             "n_iter": k, "success": False}
-
-
-# =============================================================================
-# Example: Rosenbrock
-# =============================================================================
-
-def rosenbrock_grad(x):
-    """Gradient of sum_{i} [100*(x[i+1]-x[i]^2)^2 + (1-x[i])^2]."""
-    g = np.zeros_like(x)
-    g[:-1] += -400 * x[:-1] * (x[1:] - x[:-1] ** 2) - 2 * (1 - x[:-1])
-    g[1:]  += 200 * (x[1:] - x[:-1] ** 2)
-    return g
-
-
-if __name__ == "__main__":
-    n  = 10
-    x0 = np.full(n, -1.0)
-
-    print(f"Minimizing {n}-dimensional Rosenbrock from x0 = {x0}\n")
-
-    result = minimize(
-        grad=rosenbrock_grad,
-        x0=x0,
-        tol=1e-6,
-        max_iter=10_000,
-        
-    )
-
-    print()
-    print(f"Converged : {result['success']}")
-    print(f"Iterations: {result['n_iter']}")
-    print(f"||grad||  : {result['gnorm']:.4e}")
-    print(f"x*        : {np.round(result['x'], 6)}")
