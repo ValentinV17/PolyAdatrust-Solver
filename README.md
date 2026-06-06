@@ -89,7 +89,7 @@ The defaults were selected via an Optuna search in the master's thesis on the pr
 
 ## How it works
 
-At each iteration PolyTR sets the radius from the gradient norm, takes a Steihaug–Toint truncated-CG step inside it, accepts it unconditionally, then updates the scaling factor: it shrinks (radius grows) when the gradient meets the polynomial threshold `‖∇f(xₖ₊₁)‖ ≤ ‖∇f(x₀)‖ / (cₖ+1)^θ`, and otherwise grows via an AdaGrad-Norm accumulator. The model Hessian is maintained with BFGS. Under standard assumptions it reaches `‖∇f(xₖ)‖ ≤ ε` in `O(ε^(−(2 + 1/θ)))` iterations. Full derivation and proofs are in the related master's thesis.
+At each iteration PolyTR sets the radius from the gradient norm, takes a Steihaug–Toint CG step inside it, accepts it unconditionally, then updates the scaling factor: it shrinks (radius grows) when the gradient meets the polynomial threshold `‖∇f(xₖ₊₁)‖ ≤ ‖∇f(x₀)‖ / (cₖ+1)^θ`, and otherwise grows via an AdaGrad-Norm accumulator. The model Hessian is maintained with BFGS. Under standard assumptions it reaches `‖∇f(xₖ)‖ ≤ ε` in `O(ε^(−(2 + 1/θ)))` iterations. Full derivation and proofs are in the related master's thesis.
 
 ## Contact
 
